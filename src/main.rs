@@ -1,4 +1,4 @@
-use std::{array, mem};
+use std::{array, mem, ops::AddAssign};
 
 use macroquad::{
     color::{Color, BLACK, WHITE},
@@ -6,6 +6,7 @@ use macroquad::{
     miniquad::window::screen_size,
     shapes::draw_rectangle,
     text::draw_text,
+    time::get_frame_time,
     window::{clear_background, next_frame},
 };
 use rand::{rng, Rng};
@@ -28,11 +29,11 @@ impl Menu {
         draw_text("[Q]uit", w * 0.15, h * 0.35, h * 0.075, WHITE);
     }
 
-    fn update(self) -> Scene {
+    fn update(self, char_pressed: Option<char>) -> Scene {
         if is_key_pressed(KeyCode::Escape) {
             return Scene::End;
         }
-        match get_char_pressed() {
+        match char_pressed {
             Some('q') => return Scene::End,
             Some('n') => return Scene::Game(Game::new()),
             _ => {}
@@ -53,11 +54,11 @@ impl Tile {
         }
     }
 
-    fn draw(&self, w: f32, h: f32, xpad: f32, ypad: f32) {
+    fn draw(&self, w: f32, h: f32, xpad: f32, ypad: f32, camera: &Camera) {
         let sz = h.min(w) * 0.05;
         draw_rectangle(
-            (w - sz) * 0.5 + sz * xpad,
-            (h - sz) * 0.5 + sz * ypad,
+            (w - sz) * 0.5 + sz * xpad - w * camera.pos.x,
+            (h - sz) * 0.5 + sz * ypad - h * camera.pos.y,
             sz,
             sz,
             self.color,
@@ -75,27 +76,67 @@ impl Chunk {
         Self { tiles }
     }
 
-    fn draw(&self, w: f32, h: f32) {
+    fn draw(&self, w: f32, h: f32, camera: &Camera) {
         for (i, row) in self.tiles.iter().enumerate() {
             for (j, tile) in row.iter().enumerate() {
-                tile.draw(w, h, j as f32 - 9.5, i as f32 - 9.5);
+                tile.draw(w, h, j as f32 - 9.5, i as f32 - 9.5, camera);
             }
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+struct V {
+    x: f32,
+    y: f32,
+}
+
+impl AddAssign for V {
+    fn add_assign(&mut self, rhs: Self) {
+        self.x += rhs.x;
+        self.y += rhs.y;
+    }
+}
+
+struct Camera {
+    pos: V,
+    speed: V,
+}
+
+impl Camera {
+    const ACC: f32 = 0.2;
+
+    fn new() -> Self {
+        Self {
+            pos: V { x: 0., y: 0. },
+            speed: V { x: 0., y: 0. },
+        }
+    }
+
+    fn update(&mut self, char_pressed: Option<char>, dt: f32) {
+        self.pos += self.speed;
+        match char_pressed {
+            Some('w') => self.speed.y -= Self::ACC * dt,
+            _ => {}
         }
     }
 }
 
 struct Game {
     chunk: Chunk,
+    camera: Camera,
 }
 
 impl Game {
     fn new() -> Self {
         Self {
             chunk: Chunk::new(),
+            camera: Camera::new(),
         }
     }
 
-    fn update(self) -> Scene {
+    fn update(mut self, char_pressed: Option<char>, dt: f32) -> Scene {
+        self.camera.update(char_pressed, dt);
         if is_key_pressed(KeyCode::Escape) {
             return Scene::Menu(Menu::new());
         }
@@ -104,7 +145,7 @@ impl Game {
     }
 
     fn draw(&self, w: f32, h: f32) {
-        self.chunk.draw(w, h)
+        self.chunk.draw(w, h, &self.camera)
     }
 }
 
@@ -131,11 +172,11 @@ impl Scene {
         }
     }
 
-    fn update(self) -> Self {
+    fn update(self, char_pressed: Option<char>, dt: f32) -> Self {
         match self {
-            Scene::Menu(menu) => menu.update(),
+            Scene::Menu(menu) => menu.update(char_pressed),
             Scene::End => self,
-            Scene::Game(game) => game.update(),
+            Scene::Game(game) => game.update(char_pressed, dt),
         }
     }
 }
@@ -170,7 +211,9 @@ impl App {
     }
 
     fn update(&mut self) {
+        let char_pressed = get_char_pressed();
+        let dt = get_frame_time();
         let scene = mem::replace(&mut self.scene, Scene::End);
-        self.scene = scene.update();
+        self.scene = scene.update(char_pressed, dt);
     }
 }
