@@ -47,9 +47,9 @@ struct Tile {
 
 impl Tile {
     fn new() -> Self {
-        let c = rng().random_range(0.0..1.);
+        let c = rng().random_range(0.5..0.8);
         Self {
-            color: Color::new(c, c, c, 1.),
+            color: Color::new(0., c, 0., 1.),
         }
     }
 
