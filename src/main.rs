@@ -2,7 +2,7 @@ use std::{array, mem};
 
 use macroquad::{
     color::{Color, GRAY, WHITE},
-    input::{is_key_pressed, KeyCode},
+    input::{get_char_pressed, is_key_pressed, KeyCode},
     miniquad::window::screen_size,
     shapes::draw_rectangle,
     text::draw_text,
@@ -28,11 +28,13 @@ impl Menu {
     }
 
     fn update(self) -> Scene {
-        if is_key_pressed(KeyCode::Escape) || is_key_pressed(KeyCode::Q) {
+        if is_key_pressed(KeyCode::Escape) {
             return Scene::End;
         }
-        if is_key_pressed(KeyCode::N) {
-            return Scene::Game(Game::new());
+        match get_char_pressed() {
+            Some('q') => return Scene::End,
+            Some('n') => return Scene::Game(Game::new()),
+            _ => {}
         }
         Scene::Menu(self)
     }
