@@ -1,13 +1,14 @@
 use std::{array, mem};
 
 use macroquad::{
-    color::{Color, GRAY, WHITE},
+    color::{Color, BLACK, WHITE},
     input::{get_char_pressed, is_key_pressed, KeyCode},
     miniquad::window::screen_size,
     shapes::draw_rectangle,
     text::draw_text,
-    window::next_frame,
+    window::{clear_background, next_frame},
 };
+use rand::{rng, Rng};
 
 #[macroquad::main("Sameah")]
 async fn main() {
@@ -46,11 +47,14 @@ struct Tile {
 
 impl Tile {
     fn new() -> Self {
-        Self { color: GRAY }
+        let c = rng().random_range(0.0..1.);
+        Self {
+            color: Color::new(c, c, c, 1.),
+        }
     }
 
     fn draw(&self, w: f32, h: f32, xpad: f32, ypad: f32) {
-        let sz = h * 0.05;
+        let sz = h.min(w) * 0.05;
         draw_rectangle(
             (w - sz) * 0.5 + sz * xpad,
             (h - sz) * 0.5 + sz * ypad,
@@ -74,7 +78,7 @@ impl Chunk {
     fn draw(&self, w: f32, h: f32) {
         for (i, row) in self.tiles.iter().enumerate() {
             for (j, tile) in row.iter().enumerate() {
-                tile.draw(w, h, (j as i64 - 1) as f32, (i as i64 - 1) as f32);
+                tile.draw(w, h, j as f32 - 9.5, i as f32 - 9.5);
             }
         }
     }
@@ -160,6 +164,7 @@ impl App {
     }
 
     fn draw(&self) {
+        clear_background(BLACK);
         let (w, h) = screen_size();
         self.scene.draw(w, h)
     }
