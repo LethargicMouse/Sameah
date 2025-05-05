@@ -1,8 +1,11 @@
-use std::{array, mem, ops::AddAssign};
+use std::{
+    array, mem,
+    ops::{AddAssign, Mul, MulAssign},
+};
 
 use macroquad::{
     color::{Color, BLACK, WHITE},
-    input::{get_char_pressed, is_key_pressed, KeyCode},
+    input::{get_char_pressed, is_key_down, is_key_pressed, KeyCode},
     miniquad::window::screen_size,
     shapes::draw_rectangle,
     text::draw_text,
@@ -76,10 +79,16 @@ impl Chunk {
         Self { tiles }
     }
 
-    fn draw(&self, w: f32, h: f32, camera: &Camera) {
+    fn draw(&self, w: f32, h: f32, xpad: f32, ypad: f32, camera: &Camera) {
         for (i, row) in self.tiles.iter().enumerate() {
             for (j, tile) in row.iter().enumerate() {
-                tile.draw(w, h, j as f32 - 9.5, i as f32 - 9.5, camera);
+                tile.draw(
+                    w,
+                    h,
+                    xpad * 20. + j as f32 - 9.5,
+                    ypad * 20. + i as f32 - 9.5,
+                    camera,
+                );
             }
         }
     }
@@ -89,6 +98,24 @@ impl Chunk {
 struct V {
     x: f32,
     y: f32,
+}
+
+impl Mul<f32> for V {
+    type Output = V;
+
+    fn mul(self, rhs: f32) -> Self::Output {
+        V {
+            x: self.x * rhs,
+            y: self.y * rhs,
+        }
+    }
+}
+
+impl MulAssign<f32> for V {
+    fn mul_assign(&mut self, rhs: f32) {
+        self.x *= rhs;
+        self.y *= rhs;
+    }
 }
 
 impl AddAssign for V {
@@ -104,7 +131,8 @@ struct Camera {
 }
 
 impl Camera {
-    const ACC: f32 = 0.2;
+    const ACC: f32 = 1.5;
+    const DECAY: f32 = 1.;
 
     fn new() -> Self {
         Self {
@@ -113,39 +141,81 @@ impl Camera {
         }
     }
 
-    fn update(&mut self, char_pressed: Option<char>, dt: f32) {
-        self.pos += self.speed;
-        match char_pressed {
-            Some('w') => self.speed.y -= Self::ACC * dt,
-            _ => {}
+    fn update(&mut self, dt: f32) {
+        self.pos += self.speed * dt;
+        self.speed *= 1. - dt * Self::DECAY;
+        let (w, h) = screen_size();
+        let k = h / w;
+        if is_key_down(KeyCode::Up) {
+            self.speed.y -= Self::ACC * dt;
+        }
+        if is_key_down(KeyCode::Down) {
+            self.speed.y += Self::ACC * dt;
+        }
+        if is_key_down(KeyCode::Left) {
+            self.speed.x -= Self::ACC * dt * k;
+        }
+        if is_key_down(KeyCode::Right) {
+            self.speed.x += Self::ACC * dt * k;
         }
     }
 }
 
 struct Game {
-    chunk: Chunk,
+    chunks: [[Chunk; 3]; 3],
     camera: Camera,
 }
 
 impl Game {
     fn new() -> Self {
         Self {
-            chunk: Chunk::new(),
             camera: Camera::new(),
+            chunks: array::from_fn(|_| array::from_fn(|_| Chunk::new())),
         }
     }
 
-    fn update(mut self, char_pressed: Option<char>, dt: f32) -> Scene {
-        self.camera.update(char_pressed, dt);
+    fn update(mut self, dt: f32) -> Scene {
+        self.camera.update(dt);
         if is_key_pressed(KeyCode::Escape) {
             return Scene::Menu(Menu::new());
         }
-
+        if self.camera.pos.x >= 1. {
+            for i in 0..3 {
+                self.chunks[i].swap(0, 1);
+                self.chunks[i].swap(1, 2);
+                self.chunks[i][2] = Chunk::new();
+            }
+            self.camera.pos.x -= 1.;
+        }
+        if self.camera.pos.x <= -1. {
+            for i in 0..3 {
+                self.chunks[i].swap(2, 1);
+                self.chunks[i].swap(1, 0);
+                self.chunks[i][0] = Chunk::new();
+            }
+            self.camera.pos.x += 1.;
+        }
+        if self.camera.pos.y >= 1. {
+            self.chunks.swap(0, 1);
+            self.chunks.swap(1, 2);
+            self.chunks[2] = array::from_fn(|_| Chunk::new());
+            self.camera.pos.y -= 1.;
+        }
+        if self.camera.pos.y <= -1. {
+            self.chunks.swap(2, 1);
+            self.chunks.swap(1, 0);
+            self.chunks[0] = array::from_fn(|_| Chunk::new());
+            self.camera.pos.y += 1.;
+        }
         Scene::Game(self)
     }
 
     fn draw(&self, w: f32, h: f32) {
-        self.chunk.draw(w, h, &self.camera)
+        for (i, row) in self.chunks.iter().enumerate() {
+            for (j, chunk) in row.iter().enumerate() {
+                chunk.draw(w, h, j as f32 - 1., i as f32 - 1., &self.camera);
+            }
+        }
     }
 }
 
@@ -176,7 +246,7 @@ impl Scene {
         match self {
             Scene::Menu(menu) => menu.update(char_pressed),
             Scene::End => self,
-            Scene::Game(game) => game.update(char_pressed, dt),
+            Scene::Game(game) => game.update(dt),
         }
     }
 }
